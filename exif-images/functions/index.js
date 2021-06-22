@@ -23,8 +23,10 @@ const os = require('os');
 
 const admin = require('firebase-admin');
 admin.initializeApp();
-const gcs = require('@google-cloud/storage')();
+const { Storage } = require('@google-cloud/storage');
 const spawn = require('child-process-promise').spawn;
+
+const gcs = new Storage();
 
 /**
  * When an image is uploaded in the Storage bucket the information and metadata of the image (the
@@ -39,7 +41,7 @@ exports.metadata = functions.storage.object().onFinalize(async (object) => {
 
   // Exit if this is triggered on a file that is not an image.
   if (!object.contentType.startsWith('image/')) {
-    console.log('This is not an image.');
+    functions.logger.log('This is not an image.');
     return null;
   }
 
@@ -53,11 +55,11 @@ exports.metadata = functions.storage.object().onFinalize(async (object) => {
   metadata = imageMagickOutputToObject(result.stdout);
   const safeKey = makeKeyFirebaseCompatible(filePath);
   await admin.database().ref(safeKey).set(metadata);
-  console.log('Wrote to:', filePath, 'data:', metadata);
+  functions.logger.log('Wrote to:', filePath, 'data:', metadata);
   // Cleanup temp directory after metadata is extracted
   // Remove the file from temp directory
   await fs.unlinkSync(tempLocalFile)
-  return console.log('cleanup successful!');
+  return functions.logger.log('cleanup successful!');
 });
 
 /**
@@ -86,7 +88,7 @@ function imageMagickOutputToObject(output) {
   output = lines.join('');
   output = '{' + output.substring(0, output.length - 1) + '}'; // remove trailing comma.
   output = JSON.parse(output);
-  console.log('Metadata extracted from image', output);
+  functions.logger.log('Metadata extracted from image', output);
   return output;
 }
 

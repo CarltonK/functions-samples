@@ -22,6 +22,7 @@ const cors = require('cors')({origin: true});
 
 // Firebase Setup
 const admin = require('firebase-admin');
+// @ts-ignore
 const serviceAccount = require('./service-account.json');
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -42,17 +43,20 @@ const basicAuthRequest = require('request');
  */
 exports.auth = functions.https.onRequest((req, res) => {
   const handleError = (username, error) => {
-    console.error({User: username}, error);
+    functions.logger.error({ User: username }, error);
     return res.sendStatus(500);
   };
 
   const handleResponse = (username, status, body) => {
-    console.log({User: username}, {
-      Response: {
-        Status: status,
-        Body: body,
-      },
-    });
+    functions.logger.log(
+      { User: username },
+      {
+        Response: {
+          Status: status,
+          Body: body,
+        },
+      }
+    );
     if (body) {
       return res.status(200).json(body);
     }
@@ -115,7 +119,7 @@ function authenticate(username, password) {
         return resolve(false);
       }
       if (statusCode !== 200) {
-        return reject(Error('invalid response returned from ', authEndpoint, ' status code ', statusCode));
+        return reject(new Error(`invalid response returned from ${authEndpoint} status code ${statusCode}`));
       }
       return resolve(true);
     });

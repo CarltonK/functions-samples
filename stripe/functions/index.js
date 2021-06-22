@@ -22,8 +22,10 @@ const { Logging } = require('@google-cloud/logging');
 const logging = new Logging({
   projectId: process.env.GCLOUD_PROJECT,
 });
-const stripe = require('stripe')(functions.config().stripe.secret, {
-  apiVersion: '2020-03-02',
+
+const { Stripe } = require('stripe');
+const stripe = new Stripe(functions.config().stripe.secret, {
+  apiVersion: '2020-08-27',
 });
 
 /**
@@ -58,7 +60,7 @@ exports.addPaymentMethodDetails = functions.firestore
       await snap.ref.set(paymentMethod);
       // Create a new SetupIntent so the customer can add a new method next time.
       const intent = await stripe.setupIntents.create({
-        customer: paymentMethod.customer,
+        customer: `${paymentMethod.customer}`,
       });
       await snap.ref.parent.parent.set(
         {
@@ -109,7 +111,7 @@ exports.createStripePayment = functions.firestore
     } catch (error) {
       // We want to capture errors and render them in a user-friendly way, while
       // still logging an exception with StackDriver
-      console.log(error);
+      functions.logger.log(error);
       await snap.ref.set({ error: userFacingMessage(error) }, { merge: true });
       await reportError(error, { user: context.params.userId });
     }
@@ -142,18 +144,27 @@ exports.cleanupUser = functions.auth.user().onDelete(async (user) => {
   const customer = (await dbRef.doc(user.uid).get()).data();
   await stripe.customers.del(customer.customer_id);
   // Delete the customers payments & payment methods in firestore.
-  const snapshot = await dbRef
+  const batch = admin.firestore().batch();
+  const paymetsMethodsSnapshot = await dbRef
     .doc(user.uid)
     .collection('payment_methods')
     .get();
-  snapshot.forEach((snap) => snap.ref.delete());
+  paymetsMethodsSnapshot.forEach((snap) => batch.delete(snap.ref));
+  const paymentsSnapshot = await dbRef
+    .doc(user.uid)
+    .collection('payments')
+    .get();
+  paymentsSnapshot.forEach((snap) => batch.delete(snap.ref));
+
+  await batch.commit();
+
   await dbRef.doc(user.uid).delete();
   return;
 });
 
 /**
  * To keep on top of errors, we should raise a verbose error report with Stackdriver rather
- * than simply relying on console.error. This will calculate users affected + send you email
+ * than simply relying on functions.logger.error. This will calculate users affected + send you email
  * alerts, if you've opted into receiving them.
  */
 

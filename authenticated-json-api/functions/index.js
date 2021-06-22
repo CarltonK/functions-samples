@@ -62,7 +62,7 @@ app.use(authenticate);
 app.post('/api/messages', async (req, res) => {
   const message = req.body.message;
 
-  console.log(`ANALYZING MESSAGE: "${message}"`);
+  functions.logger.log(`ANALYZING MESSAGE: "${message}"`);
 
   try {
     const results = await client.analyzeSentiment({
@@ -72,11 +72,16 @@ app.post('/api/messages', async (req, res) => {
     const category = categorizeScore(results[0].documentSentiment.score);
     const data = {message: message, sentiment: results[0], category: category};
 
-    await admin.database().ref(`/users/${req.user.uid}/messages`).push(data);
+    // @ts-ignore
+    const uid = req.user.uid;
+    await admin.database().ref(`/users/${uid}/messages`).push(data);
 
     res.status(201).json({message, category});
   } catch(error) {
-    console.log('Error detecting sentiment or saving message', error.message);
+    functions.logger.log(
+      'Error detecting sentiment or saving message',
+      error.message
+    );
     res.sendStatus(500);
   }
 });
@@ -84,8 +89,12 @@ app.post('/api/messages', async (req, res) => {
 // GET /api/messages?category={category}
 // Get all messages, optionally specifying a category to filter on
 app.get('/api/messages', async (req, res) => {
-  const category = req.query.category;
-  let query = admin.database().ref(`/users/${req.user.uid}/messages`);
+  // @ts-ignore
+  const uid = req.user.uid;
+  const category = `${req.query.category}`;
+
+  /** @type admin.database.Query */
+  let query = admin.database().ref(`/users/${uid}/messages`);
 
   if (category && ['positive', 'negative', 'neutral'].indexOf(category) > -1) {
     // Update the query with the valid category
@@ -103,7 +112,7 @@ app.get('/api/messages', async (req, res) => {
 
     res.status(200).json(messages);
   } catch(error) {
-    console.log('Error getting messages', error.message);
+    functions.logger.log('Error getting messages', error.message);
     res.sendStatus(500);
   }
 });
@@ -113,10 +122,12 @@ app.get('/api/messages', async (req, res) => {
 app.get('/api/message/:messageId', async (req, res) => {
   const messageId = req.params.messageId;
 
-  console.log(`LOOKING UP MESSAGE "${messageId}"`);
+  functions.logger.log(`LOOKING UP MESSAGE "${messageId}"`);
 
   try {
-    const snapshot = await admin.database().ref(`/users/${req.user.uid}/messages/${messageId}`).once('value');
+    // @ts-ignore
+    const uid = req.user.uid;
+    const snapshot = await admin.database().ref(`/users/${uid}/messages/${messageId}`).once('value');
 
     if (!snapshot.exists()) {
       return res.status(404).json({errorCode: 404, errorMessage: `message '${messageId}' not found`});
@@ -124,7 +135,11 @@ app.get('/api/message/:messageId', async (req, res) => {
     res.set('Cache-Control', 'private, max-age=300');
     return res.status(200).json(snapshot.val());
   } catch(error) {
-    console.log('Error getting message details', messageId, error.message);
+    functions.logger.log(
+      'Error getting message details',
+      messageId,
+      error.message
+    );
     return res.sendStatus(500);
   }
 });

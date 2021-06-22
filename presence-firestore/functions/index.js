@@ -25,7 +25,7 @@ admin.initializeApp();
 const firestore = admin.firestore();
 
 // Create a new function which is triggered on changes to /status/{uid}
-// Note: This is a Realtime Database trigger, *not* Cloud Firestore.
+// Note: This is a Realtime Database trigger, *not* Firestore.
 exports.onUserStatusChanged = functions.database.ref('/status/{uid}').onUpdate(
     async (change, context) => {
       // Get the data written to Realtime Database
@@ -41,7 +41,7 @@ exports.onUserStatusChanged = functions.database.ref('/status/{uid}').onUpdate(
       // and compare the timestamps.
       const statusSnapshot = await change.after.ref.once('value');
       const status = statusSnapshot.val();
-      console.log(status, eventStatus);
+      functions.logger.log(status, eventStatus);
       // If the current timestamp for this data is newer than
       // the data that triggered this event, we exit this function.
       if (status.last_changed > eventStatus.last_changed) {

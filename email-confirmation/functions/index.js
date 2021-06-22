@@ -32,12 +32,12 @@ const mailTransport = nodemailer.createTransport({
 
 // Sends an email confirmation when a user changes his mailing list subscription.
 exports.sendEmailConfirmation = functions.database.ref('/users/{uid}').onWrite(async (change) => {
-  const snapshot = change.after;
-  const val = snapshot.val();
-
-  if (!snapshot.changed('subscribedToMailingList')) {
+  // Early exit if the 'subscribedToMailingList' field has not changed
+  if (change.after.child('subscribedToMailingList').val() === change.before.child('subscribedToMailingList').val()) {
     return null;
   }
+
+  const val = change.after.val();
 
   const mailOptions = {
     from: '"Spammy Corp." <noreply@firebase.com>',
@@ -54,9 +54,15 @@ exports.sendEmailConfirmation = functions.database.ref('/users/{uid}').onWrite(a
   
   try {
     await mailTransport.sendMail(mailOptions);
-    console.log(`New ${subscribed ? '' : 'un'}subscription confirmation email sent to:`, val.email);
+    functions.logger.log(
+      `New ${subscribed ? '' : 'un'}subscription confirmation email sent to:`,
+      val.email
+    );
   } catch(error) {
-    console.error('There was an error while sending the email:', error);
+    functions.logger.error(
+      'There was an error while sending the email:',
+      error
+    );
   }
   return null;
 });
